@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0b0b0d">
+<title>Desk Clock & Weather</title>
+<style>
+*{box-sizing:border-box}
+html,body{width:100%;height:100%;margin:0;overflow:hidden;background:#0b0b0d;color:#ff9b42}
+body{font-family:Arial,"Hiragino Kaku Gothic ProN",Meiryo,sans-serif;-webkit-font-smoothing:antialiased}
+#app{width:100vw;height:100vh;height:100dvh;padding:clamp(5px,1.1vh,12px);display:flex;flex-direction:column;gap:clamp(5px,1vh,10px)}
+#main{flex:1 1 auto;min-height:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:clamp(5px,1vw,12px)}
+.tile{background:#19191c;border-radius:clamp(7px,1.2vw,14px);display:flex;align-items:center;justify-content:center;min-width:0;min-height:0;overflow:hidden;color:#ff9b42;text-align:center}
+.value{white-space:nowrap;font-weight:700;line-height:1;letter-spacing:-.035em}
+#clock{font-size:clamp(42px,10.5vw,118px);font-variant-numeric:tabular-nums}
+#date{font-size:clamp(28px,6.2vw,72px);letter-spacing:-.045em}
+#temp,#humidity{font-size:clamp(38px,8.4vw,96px)}
+#forecastWrap{flex:0 0 26%;min-height:0;display:flex;flex-direction:column;gap:4px}
+#forecastHint{display:flex;justify-content:space-between;align-items:center;color:#8d8d96;font-size:clamp(10px,1.8vw,14px);line-height:1}
+#forecast{flex:1;min-height:0;display:flex;gap:clamp(4px,.8vw,9px);overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+#forecast::-webkit-scrollbar{display:none}
+.hour{flex:0 0 19%;min-width:19%;min-height:0;background:#202126;border-radius:clamp(5px,.9vw,10px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:clamp(2px,.7vh,8px);overflow:hidden}
+.hour-time{color:#c9cad0;font-size:clamp(12px,2.5vw,28px);white-space:nowrap}
+.icon{font-size:clamp(22px,5vw,54px);line-height:1.05}
+.hour-temp{color:#fff;font-weight:700;font-size:clamp(17px,3.4vw,38px);white-space:nowrap}
+#settingsButton{position:fixed;top:5px;right:5px;z-index:6;border:0;border-radius:5px;padding:5px 7px;background:#303036;color:#c9cad0;font-size:11px;opacity:.72}
+#status{position:fixed;left:8px;right:8px;bottom:8px;z-index:5;display:none;padding:10px 12px;border-radius:8px;background:#202126;color:#f0f0f0;text-align:center;font-size:14px}
+#settingsPanel{display:none;position:fixed;inset:0;z-index:10;background:rgba(0,0,0,.9);align-items:center;justify-content:center;padding:16px;color:#f4f4f4}
+#settingsBox{width:100%;max-width:440px;background:#202126;border-radius:12px;padding:18px}
+#settingsTitle{font-size:22px;font-weight:bold;margin-bottom:8px}
+#settingsHelp{color:#c9cad0;font-size:14px;margin-bottom:12px}
+#cityForm{display:flex;gap:7px}
+#cityInput{flex:1;min-width:0;font-size:18px;padding:10px;border:1px solid #555;border-radius:6px;background:#101013;color:#fff}
+#cityForm button,#cancelSettings,.cityChoice{font-size:15px;padding:9px 12px;border:0;border-radius:6px;background:#ff9b42;color:#19191c}
+#cityResults{margin-top:12px;max-height:35vh;overflow:auto}
+.cityChoice{display:block;width:100%;text-align:left;margin:5px 0}
+#settingsMessage{font-size:13px;color:#e5e5e5;margin-top:9px}
+#cancelSettings{margin-top:12px;background:#45454d;color:#fff}
+@media (orientation:portrait){
+#clock{font-size:clamp(42px,13vw,84px)}
+#date{font-size:clamp(25px,7vw,54px)}
+#temp,#humidity{font-size:clamp(34px,10vw,70px)}
+#forecastWrap{flex-basis:24%}
+.hour-time{font-size:clamp(11px,3vw,18px)}
+.icon{font-size:clamp(20px,5.5vw,34px)}
+.hour-temp{font-size:clamp(15px,4vw,24px)}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <main id="main" aria-label="時刻と天気">
+    <section class="tile"><div id="clock" class="value">--:--</div></section>
+    <section class="tile"><div id="date" class="value">--/-- --</div></section>
+    <section class="tile"><div id="temp" class="value">--°C</div></section>
+    <section class="tile"><div id="humidity" class="value">--%</div></section>
+  </main>
+  <section id="forecastWrap" aria-label="時間別天気">
+    <div id="forecastHint"><span>1時間ごとの天気</span><span>← スワイプ →</span></div>
+    <div id="forecast"></div>
+  </section>
+</div>
+<button id="settingsButton" type="button" aria-label="地域設定">地域設定</button>
+<div id="settingsPanel" role="dialog" aria-label="天気を表示する地域">
+  <div id="settingsBox">
+    <div id="settingsTitle">天気を表示する地域</div>
+    <div id="settingsHelp">市区町村名・市名＋区名を入力してください</div>
+    <form id="cityForm">
+      <input id="cityInput" type="text" autocomplete="off" placeholder="例：横浜市港北区">
+      <button id="searchButton" type="submit">検索</button>
+    </form>
+    <div id="cityResults"></div>
+    <div id="settingsMessage"></div>
+    <button id="cancelSettings" type="button">キャンセル</button>
+  </div>
+</div>
+<div id="status"></div>
+<script>
+(function(){
+  var status=document.getElementById('status');
+  var forecast=document.getElementById('forecast');
+  var settingsPanel=document.getElementById('settingsPanel');
+  var cityInput=document.getElementById('cityInput');
+  var cityResults=document.getElementById('cityResults');
+  var settingsMessage=document.getElementById('settingsMessage');
+  var cancelSettings=document.getElementById('cancelSettings');
+  var savedPlace=null;
+  try{savedPlace=JSON.parse(localStorage.getItem('deskWeatherPlace')||'null');}catch(e){}
+  function showStatus(message){status.textContent=message;status.style.display='block';}
+  function hideStatus(){status.style.display='none';}
+  function updateClock(){
+    var now=new Date(),hh=('0'+now.getHours()).slice(-2),mm=('0'+now.getMinutes()).slice(-2);
+    document.getElementById('clock').textContent=hh+':'+mm;
+    var weekdays=['日','月','火','水','木','金','土'];
+    document.getElementById('date').textContent=(now.getMonth()+1)+'/'+now.getDate()+' '+weekdays[now.getDay()];
+  }
+  updateClock();setInterval(updateClock,1000);
+  function iconFor(code){
+    if(code===0)return {symbol:'☀',color:'#ff9b42'};
+    if(code===1||code===2)return {symbol:'⛅',color:'#ffb45e'};
+    if(code===3)return {symbol:'☁',color:'#ffffff'};
+    if(code===45||code===48)return {symbol:'≋',color:'#c9cad0'};
+    if((code>=51&&code<=67)||(code>=80&&code<=82))return {symbol:'☂',color:'#45aaff'};
+    if((code>=71&&code<=77)||(code>=85&&code<=86))return {symbol:'❄',color:'#8bdcff'};
+    if(code>=95)return {symbol:'⚡',color:'#ffd84a'};
+    return {symbol:'⛅',color:'#ffb45e'};
+  }
+  function getJSON(url,callback){
+    var xhr=new XMLHttpRequest();xhr.open('GET',url,true);
+    xhr.onreadystatechange=function(){
+      if(xhr.readyState===4){
+        if(xhr.status>=200&&xhr.status<300){try{callback(null,JSON.parse(xhr.responseText));}catch(e){callback(e);}}
+        else callback(new Error('request failed'));
+      }
+    };
+    xhr.onerror=function(){callback(new Error('network error'));};xhr.send();
+  }
+  function drawForecast(data){
+    forecast.innerHTML='';
+    var now=new Date(),hour=now.getHours();
+    var currentKey=now.getFullYear()+'-'+('0'+(now.getMonth()+1)).slice(-2)+'-'+('0'+now.getDate()).slice(-2)+'T'+('0'+hour).slice(-2)+':00';
+    var start=0;
+    for(var i=0;i<data.hourly.time.length;i++){if(data.hourly.time[i]>=currentKey){start=i;break;}}
+    for(var j=0;j<24;j++){
+      var idx=start+j;if(idx>=data.hourly.time.length)break;
+      var card=document.createElement('div');card.className='hour';
+      var time=document.createElement('div');time.className='hour-time';
+      time.textContent=parseInt(data.hourly.time[idx].slice(11,13),10)+'時';
+      var ico=iconFor(data.hourly.weather_code[idx]);
+      var icon=document.createElement('div');icon.className='icon';icon.textContent=ico.symbol;icon.style.color=ico.color;
+      var temp=document.createElement('div');temp.className='hour-temp';temp.textContent=Math.round(data.hourly.temperature_2m[idx])+'°';
+      card.appendChild(time);card.appendChild(icon);card.appendChild(temp);forecast.appendChild(card);
+    }
+    forecast.scrollLeft=0;
+  }
+  function loadWeather(lat,lon){
+    var url='https://api.open-meteo.com/v1/forecast?latitude='+encodeURIComponent(lat)+'&longitude='+encodeURIComponent(lon)+
+      '&current=temperature_2m,relative_humidity_2m,weather_code&hourly=temperature_2m,weather_code&forecast_days=2&timezone=Asia%2FTokyo';
+    getJSON(url,function(err,data){
+      if(err||!data||!data.current||!data.hourly){showStatus('天気情報を取得できません。通信状態を確認してください。');return;}
+      hideStatus();
+      document.getElementById('temp').textContent=Math.round(data.current.temperature_2m)+'°C';
+      document.getElementById('humidity').textContent=Math.round(data.current.relative_humidity_2m)+'%';
+      drawForecast(data);
+    });
+  }
+  function openSettings(){
+    settingsPanel.style.display='flex';cityResults.innerHTML='';settingsMessage.textContent='';
+    cancelSettings.style.display=savedPlace?'inline-block':'none';cityInput.value='';cityInput.focus();
+  }
+  function closeSettings(){settingsPanel.style.display='none';}
+  function selectPlace(place){
+    savedPlace=place;
+    try{localStorage.setItem('deskWeatherPlace',JSON.stringify(place));}catch(e){}
+    document.getElementById('settingsButton').title='現在の地域：'+place.name;
+    closeSettings();loadWeather(place.latitude,place.longitude);
+  }
+  function addPlaceButton(place,label){
+    var button=document.createElement('button');button.type='button';button.className='cityChoice';button.textContent=label;
+    button.onclick=function(){selectPlace({name:label,latitude:place.lat,longitude:place.lon});};
+    cityResults.appendChild(button);
+  }
+  function searchOpenStreetMap(query,callback){
+    var url='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=8&addressdetails=1&accept-language=ja&countrycodes=jp&q='+encodeURIComponent(query);
+    getJSON(url,function(err,results){
+      if(err||!results||!results.length){callback(null,[]);return;}
+      var places=[];
+      for(var i=0;i<results.length;i++){
+        var r=results[i],a=r.address||{},label=r.display_name||query;
+        // Prefer municipality/district-level matches and shorten the long address label.
+        var name=a.city||a.town||a.village||a.municipality||a.city_district||a.suburb||a.county||query;
+        var district=a.city_district||a.suburb||a.borough||'';
+        var city=a.city||a.town||a.village||a.municipality||'';
+        var shortLabel=name;
+        if(city&&district&&district!==city)shortLabel=city+' '+district;
+        else if(a.state)shortLabel=name+'（'+a.state+'）';
+        if(!shortLabel||shortLabel.length<2)shortLabel=label;
+        places.push({lat:parseFloat(r.lat),lon:parseFloat(r.lon),label:shortLabel,importance:parseFloat(r.importance||0)});
+      }
+      callback(null,places);
+    });
+  }
+  function searchOpenMeteo(query,callback){
+    var url='https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(query)+'&count=10&language=ja&countryCode=JP&format=json';
+    getJSON(url,function(err,data){
+      var places=[];
+      if(!err&&data&&data.results){
+        for(var i=0;i<data.results.length;i++){
+          var r=data.results[i],label=r.name||query;
+          if(r.admin1)label+='（'+r.admin1+'）';
+          places.push({lat:r.latitude,lon:r.longitude,label:label,importance:0});
+        }
+      }
+      callback(null,places);
+    });
+  }
+  document.getElementById('settingsButton').onclick=openSettings;
+  cancelSettings.onclick=closeSettings;
+  document.getElementById('cityForm').onsubmit=function(event){
+    if(event&&event.preventDefault)event.preventDefault();
+    var query=cityInput.value.replace(/^\\s+|\\s+$/g,'');
+    if(query.length<2){settingsMessage.textContent='市区町村名を2文字以上で入力してください。';return false;}
+    settingsMessage.textContent='地域を検索中…';cityResults.innerHTML='';
+    searchOpenStreetMap(query,function(err,places){
+      if(places&&places.length){
+        places.sort(function(a,b){return b.importance-a.importance;});
+        settingsMessage.textContent='地域を選択してください。';
+        for(var i=0;i<places.length;i++)addPlaceButton(places[i],places[i].label);
+      }else{
+        searchOpenMeteo(query,function(err2,fallbackPlaces){
+          if(!fallbackPlaces.length){settingsMessage.textContent='見つかりませんでした。市名＋区名など、別の書き方でも試してください。';return;}
+          settingsMessage.textContent='地域を選択してください。区が見つからない場合は市の代表地点が表示されることがあります。';
+          for(var j=0;j<fallbackPlaces.length;j++)addPlaceButton(fallbackPlaces[j],fallbackPlaces[j].label);
+        });
+      }
+    });
+    return false;
+  };
+  if(savedPlace&&typeof savedPlace.latitude==='number'&&typeof savedPlace.longitude==='number'){
+    document.getElementById('settingsButton').title='現在の地域：'+(savedPlace.name||'設定済み');
+    loadWeather(savedPlace.latitude,savedPlace.longitude);
+  }else{openSettings();}
+  setInterval(function(){if(savedPlace)loadWeather(savedPlace.latitude,savedPlace.longitude);},30*60*1000);
+})();
+</script>
+</body>
+</html>
